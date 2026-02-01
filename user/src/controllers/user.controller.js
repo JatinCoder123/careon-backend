@@ -5,7 +5,6 @@ import { generateToken } from "../services/token.service.js";
 export const handleGoogleLogin = async (req, res) => {
   try {
     const { idToken } = req.body;
-
     // 🔐 Verify with Google
     const googleUser = await verifyGoogleToken(idToken);
 
