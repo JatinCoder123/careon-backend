@@ -9,8 +9,9 @@ export const generateToken = (userId) => {
 };
 export const verifyToken = (token) => {
   try {
-    return jwt.verify(token, process.env.JWT_SECRET);  
-    } catch (error) {
+    return jwt.verify(token, process.env.JWT_SECRET);
+  } catch (error) {
     throw new Error("Invalid token");
   }
 };
+// AIzaSyDDvHS0Mu6M_8lNiouDLaDngy2FDEbN - Ss
