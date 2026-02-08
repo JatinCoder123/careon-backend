@@ -12,3 +12,4 @@ router.post("/add", protect, addEmergencyContact);
 router.delete("/remove/:id", protect, removeEmergencyContact  );
 
 export default router;
+// AIzaSyAhBGnIyTLuRzdWppKBJNW9bqLh9Odpp_A
