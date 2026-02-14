@@ -1,51 +1,73 @@
-import User from "../models/User.model.js";
+import { db } from "../config/db.js";
 import { verifyGoogleToken } from "../services/googleAuth.service.js";
 import { generateToken } from "../services/token.service.js";
 import admin from "../config/firebase.js";
 
-// import { redis } from "../config/redis.js";
-// import { generateOTP, hashOTP, verifyOTP } from "../services/otp.service.js";
-// import { sendSMS } from "../services/sms.service.js";
-// const OTP_TTL = 300;
-// const MAX_ATTEMPTS = 3;
-// const RESEND_TTL = 30;
+/**
+ * GOOGLE LOGIN
+ */
 export const handleGoogleLogin = async (req, res) => {
   try {
     const { idToken } = req.body;
-    // 🔐 Verify with Google
+
+    // 🔐 Verify Google token
     const googleUser = await verifyGoogleToken(idToken);
 
-    // 🔍 Find user
-    let user = await User.findOne({ email: googleUser.email });
+    // 🔍 Find user by email
+    const [rows] = await db.query(
+      "SELECT * FROM users WHERE email = ? LIMIT 1",
+      [googleUser.email]
+    );
 
-    // ➕ Create if not exists
+    let user = rows[0];
+
+    // ➕ Create user if not exists
     if (!user) {
-      user = await User.create({
+      const [result] = await db.query(
+        `
+        INSERT INTO users 
+        (name, email, photo, auth_provider, is_verified, last_login)
+        VALUES (?, ?, ?, 'google', ?, NOW())
+        `,
+        [
+          googleUser.name,
+          googleUser.email,
+          googleUser.picture,
+          googleUser.emailVerified,
+        ]
+      );
+
+      user = {
+        id: result.insertId,
         name: googleUser.name,
         email: googleUser.email,
         photo: googleUser.picture,
-        authProvider: "google",
-        isVerified: googleUser.emailVerified,
-      });
+        auth_provider: "google",
+        is_verified: googleUser.emailVerified,
+      };
+    } else {
+      // 🕒 Update last login
+      await db.query(
+        "UPDATE users SET last_login = NOW() WHERE id = ?",
+        [user.id]
+      );
     }
 
-    // 🕒 Update last login
-    user.lastLogin = new Date();
-    await user.save();
+    // 🔑 Generate JWT
+    const token = generateToken(user.id);
 
-    // 🔑 Generate app JWT
-    const token = generateToken(user._id);
-
-    res.status(200).json({
-      token,
-      user,
-    });
+    res.status(200).json({ token, user });
   } catch (error) {
-    console.error("Google auth error:", error.message);
-    res.status(401).json({ message: error.message || "Authentication failed" });
+    console.error("Google auth error:", error);
+    res.status(401).json({
+      message: error.message || "Authentication failed",
+    });
   }
 };
 
+/**
+ * FIREBASE PHONE LOGIN
+ */
 export const handleFirebaseLogin = async (req, res) => {
   try {
     const { firebaseToken } = req.body;
@@ -56,9 +78,8 @@ export const handleFirebaseLogin = async (req, res) => {
       });
     }
 
-    // 1️⃣ Verify Firebase ID token
+    // 🔐 Verify Firebase token
     const decodedToken = await admin.auth().verifyIdToken(firebaseToken);
-
     const phoneNumber = decodedToken.phone_number;
 
     if (!phoneNumber) {
@@ -66,29 +87,44 @@ export const handleFirebaseLogin = async (req, res) => {
         message: "Invalid Firebase token",
       });
     }
-    // 🔍 Find user
-    let user = await User.findOne({ phone: phoneNumber });
 
-    // ➕ Create if not exists
+    // 🔍 Find user by phone
+    const [rows] = await db.query(
+      "SELECT * FROM users WHERE phone = ? LIMIT 1",
+      [phoneNumber]
+    );
+
+    let user = rows[0];
+
+    // ➕ Create user if not exists
     if (!user) {
-      user = await User.create({
+      const [result] = await db.query(
+        `
+        INSERT INTO users
+        (phone, auth_provider, is_verified, last_login)
+        VALUES (?, 'phone', true, NOW())
+        `,
+        [phoneNumber]
+      );
+
+      user = {
+        id: result.insertId,
         phone: phoneNumber,
-        authProvider: "phone",
-        isVerified: true,
-      });
+        auth_provider: "phone",
+        is_verified: true,
+      };
+    } else {
+      // 🕒 Update last login
+      await db.query(
+        "UPDATE users SET last_login = NOW() WHERE id = ?",
+        [user.id]
+      );
     }
 
-    // 🕒 Update last login
-    user.lastLogin = new Date();
-    await user.save();
+    // 🔑 Generate JWT
+    const token = generateToken(user.id);
 
-    // 🔑 Generate app JWT
-    const token = generateToken(user._id);
-
-    res.status(200).json({
-      token,
-      user,
-    });
+    res.status(200).json({ token, user });
   } catch (error) {
     console.error("Firebase login error:", error);
     res.status(401).json({
@@ -97,64 +133,17 @@ export const handleFirebaseLogin = async (req, res) => {
   }
 };
 
+/**
+ * VERIFY SESSION
+ * (req.user is set by JWT middleware)
+ */
 export const verifySession = async (req, res) => {
   try {
     res.status(200).json({
       authenticated: true,
       user: req.user,
     });
-  } catch (error) {
+  } catch {
     res.status(401).json({ authenticated: false });
   }
 };
-
-// export const handlePhoneLogin = async (req, res) => {
-//   const { phone } = req.body;
-
-//   const exists = await redis.exists(`otp:${phone}`);
-//   if (exists) return res.status(429).json({ message: "OTP already sent" });
-
-//   const otp = generateOTP();
-//   const otpHash = await hashOTP(otp);
-
-//   await redis.setEx(`otp:${phone}`, OTP_TTL, otpHash);
-//   await redis.setEx(`otp_attempt:${phone}`, OTP_TTL, 0);
-//   await redis.setEx(`otp_resend:${phone}`, RESEND_TTL, 1);
-//   try {
-//     await sendSMS(phone, `Your CareOn OTP is ${otp}`);
-//   } catch (error) {
-//     await redis.del(`otp:${phone}`, `otp_attempt:${phone}`);
-//     return res.status(500).json({ message: "SMS failed" });
-//   }
-
-//   res.json({ message: "OTP sent successfully" });
-// };
-
-// export const verifyOTP = async (req, res) => {
-//   const { phone, otp } = req.body;
-
-//   const attempts = Number(await redis.get(`otp_attempt:${phone}`));
-//   if (attempts >= MAX_ATTEMPTS)
-//     return res.status(403).json({ message: "Too many attempts" });
-
-//   const hash = await redis.get(`otp:${phone}`);
-//   if (!hash) return res.status(410).json({ message: "OTP expired" });
-
-//   await redis.incr(`otp_attempt:${phone}`);
-
-//   const isValid = await verifyOTP(otp, hash);
-//   if (!isValid) return res.status(401).json({ message: "Invalid OTP" });
-
-//   await redis.del(
-//     `otp:${phone}`,
-//     `otp_attempt:${phone}`,
-//     `otp_resend:${phone}`,
-//   );
-
-//   const token = generateToken(phone);
-//   res.json({
-//     message: "Login successful",
-//     token,
-//     user: { phone },
-//   });
-// };
