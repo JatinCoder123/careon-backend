@@ -1,75 +1,98 @@
-import EmergencyContact from "../models/EmergencyContact.model.js";
-import User from "../models/User.model.js";
+import { db } from "../config/db.js";
 
+/**
+ * GET all active emergency contacts of logged-in user
+ */
 export const getAllEmergencyContacts = async (req, res) => {
   try {
-    const contacts = await EmergencyContact.find({
-      user: req.user.id,
-      isActive: true,
-    }).sort({ priority: 1 });
+    const userId = req.user.id;
+
+    const [contacts] = await db.query(
+      `
+      SELECT id, name, phone, relationship, priority
+      FROM emergency_contacts
+      WHERE user_id = ? AND is_active = true
+      ORDER BY priority ASC
+      `,
+      [userId]
+    );
 
     res.json(contacts);
   } catch (error) {
+    console.error(error);
     res.status(500).json({ message: "Server error" });
   }
 };
+
+/**
+ * ADD emergency contact
+ */
 export const addEmergencyContact = async (req, res) => {
   try {
-    const userId = req.user.id; // from auth middleware
+    const userId = req.user.id;
     const { name, phone, relationship } = req.body;
 
     if (!name || !phone) {
-      return res.status(400).json({ message: "Name and phone are required" });
+      return res
+        .status(400)
+        .json({ message: "Name and phone are required" });
     }
 
-    // 1️⃣ Create contact
-    const contact = await EmergencyContact.create({
-      user: userId,
-      name,
-      phone,
-      relationship,
-    });
-
-    // 2️⃣ Push contact ID into user
-    await User.findByIdAndUpdate(userId, {
-      $push: { emergencyContacts: contact._id },
-    });
+    const [result] = await db.query(
+      `
+      INSERT INTO emergency_contacts (user_id, name, phone, relationship)
+      VALUES (?, ?, ?, ?)
+      `,
+      [userId, name.trim(), phone.trim(), relationship || null]
+    );
 
     res.status(201).json({
       message: "Emergency contact added",
-      contact,
+      contact: {
+        id: result.insertId,
+        name,
+        phone,
+        relationship,
+      },
     });
   } catch (error) {
-    if (error.code === 11000) {
+    console.error(error);
+
+    // Duplicate phone (UNIQUE constraint)
+    if (error.code === "ER_DUP_ENTRY") {
       return res.status(409).json({
-        message: "This contact already exists for this user",
+        message: "This phone number is already added as an emergency contact",
       });
     }
+
     res.status(500).json({ message: "Server error" });
   }
 };
 
+/**
+ * REMOVE emergency contact (soft delete recommended)
+ */
 export const removeEmergencyContact = async (req, res) => {
   try {
     const { id } = req.params;
     const userId = req.user.id;
 
-    const contact = await EmergencyContact.findOneAndDelete({
-      _id: id,
-      user: userId,
-    });
+    const [result] = await db.query(
+      `
+      UPDATE emergency_contacts
+      SET is_active = false
+      WHERE id = ? AND user_id = ?
+      `,
+      [id, userId]
+    );
 
-    if (!contact) {
+    if (result.affectedRows === 0) {
       return res.status(404).json({ message: "Contact not found" });
     }
 
-    await User.findByIdAndUpdate(userId, {
-      $pull: { emergencyContacts: id },
-    });
-
-    res.json({ message: "Contact deleted" });
+    res.json({ message: "Contact removed" });
   } catch (error) {
+    console.error(error);
     res.status(500).json({ message: "Server error" });
   }
 };
-  

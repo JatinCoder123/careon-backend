@@ -1,4 +1,4 @@
-import User from "../models/User.model.js";
+import { db } from "../config/db.js";
 import { verifyToken } from "../services/token.service.js";
 
 export const protect = async (req, res, next) => {
@@ -12,13 +12,25 @@ export const protect = async (req, res, next) => {
     const token = authHeader.split(" ")[1];
 
     // 🔐 Verify JWT
-    const decoded = verifyToken(token);
+    const decoded = verifyToken(token); // { userId }
 
-    // 🔍 Fetch user
-    const user = await User.findById(decoded.userId).select("-__v");
+    // 🔍 Fetch user from MySQL
+    const [rows] = await db.query(
+      `
+      SELECT id, name, email, phone, auth_provider, is_verified, is_active
+      FROM users
+      WHERE id = ?
+      LIMIT 1
+      `,
+      [decoded.userId]
+    );
 
-    if (!user || !user.isActive) {
-      return res.status(401).json({ message: "User not found or inactive" });
+    const user = rows[0];
+
+    if (!user || !user.is_active) {
+      return res.status(401).json({
+        message: "User not found or inactive",
+      });
     }
 
     // Attach user to request
@@ -26,6 +38,7 @@ export const protect = async (req, res, next) => {
 
     next();
   } catch (error) {
+    console.error("Auth middleware error:", error);
     return res.status(401).json({ message: "Invalid or expired token" });
   }
 };
