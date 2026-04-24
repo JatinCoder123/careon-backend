@@ -12,6 +12,7 @@ export const handleGoogleLogin = async (req, res) => {
 
     // 🔐 Verify Google token
     const googleUser = await verifyGoogleToken(idToken);
+    console.log("GOOGLE USER", googleUser)
 
     // 🔍 Find user by email
     const [rows] = await db.query(
@@ -20,6 +21,7 @@ export const handleGoogleLogin = async (req, res) => {
     );
 
     let user = rows[0];
+    console.log(user)
 
     // ➕ Create user if not exists
     if (!user) {

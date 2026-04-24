@@ -17,7 +17,7 @@ export const protect = async (req, res, next) => {
     // 🔍 Fetch user from MySQL
     const [rows] = await db.query(
       `
-      SELECT id, name, email, phone, auth_provider, is_verified, is_active
+      SELECT id, name, email, phone,photo, auth_provider, is_verified, is_active
       FROM users
       WHERE id = ?
       LIMIT 1

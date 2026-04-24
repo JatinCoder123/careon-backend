@@ -9,7 +9,7 @@ export const getAllEmergencyContacts = async (req, res) => {
 
     const [contacts] = await db.query(
       `
-      SELECT id, name, phone, relationship, priority
+      SELECT id, name, phone, email, relationship, priority
       FROM emergency_contacts
       WHERE user_id = ? AND is_active = true
       ORDER BY priority ASC
@@ -30,20 +30,36 @@ export const getAllEmergencyContacts = async (req, res) => {
 export const addEmergencyContact = async (req, res) => {
   try {
     const userId = req.user.id;
-    const { name, phone, relationship } = req.body;
+    const { name, phone, email, relationship, priority } = req.body;
 
-    if (!name || !phone) {
-      return res
-        .status(400)
-        .json({ message: "Name and phone are required" });
+    // Name required
+    if (!name) {
+      return res.status(400).json({
+        message: "Name is required",
+      });
+    }
+
+    // Either phone or email required
+    if (!phone && !email) {
+      return res.status(400).json({
+        message: "Either phone or email is required",
+      });
     }
 
     const [result] = await db.query(
       `
-      INSERT INTO emergency_contacts (user_id, name, phone, relationship)
-      VALUES (?, ?, ?, ?)
+      INSERT INTO emergency_contacts
+      (user_id, name, phone, email, relationship, priority)
+      VALUES (?, ?, ?, ?, ?, ?)
       `,
-      [userId, name.trim(), phone.trim(), relationship || null]
+      [
+        userId,
+        name.trim(),
+        phone ? phone.trim() : null,
+        email ? email.trim() : null,
+        relationship || null,
+        priority || 1,
+      ]
     );
 
     res.status(201).json({
@@ -51,26 +67,20 @@ export const addEmergencyContact = async (req, res) => {
       contact: {
         id: result.insertId,
         name,
-        phone,
+        phone: phone || null,
+        email: email || null,
         relationship,
+        priority: priority || 1,
       },
     });
   } catch (error) {
     console.error(error);
-
-    // Duplicate phone (UNIQUE constraint)
-    if (error.code === "ER_DUP_ENTRY") {
-      return res.status(409).json({
-        message: "This phone number is already added as an emergency contact",
-      });
-    }
-
     res.status(500).json({ message: "Server error" });
   }
 };
 
 /**
- * REMOVE emergency contact (soft delete recommended)
+ * REMOVE emergency contact (soft delete)
  */
 export const removeEmergencyContact = async (req, res) => {
   try {
