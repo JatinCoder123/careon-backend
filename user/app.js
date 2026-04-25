@@ -9,6 +9,7 @@ app.use(cors());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 
+app.use("/api/v1/sos", sosRoutes);
 
 app.use("/api/v1/user", userRoutes);
 app.use("/api/v1/emergency-contact", contactRoutes);
