@@ -5,16 +5,9 @@ const router = express.Router();
 
 router.post("/send-email", async (req, res) => {
   try {
-    const {
-      contacts,
-      userName,
-      latitude,
-      longitude,
-      battery,
-    } = req.body;
+    const { contacts, userName, latitude, longitude, battery } = req.body;
 
-    const locationUrl =
-      `https://maps.google.com/?q=${latitude},${longitude}`;
+    const locationUrl = `https://maps.google.com/?q=${latitude},${longitude}`;
 
     for (const contact of contacts) {
       if (contact.email) {
