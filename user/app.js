@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import userRoutes from "./src/routes/user.route.js";
 import contactRoutes from "./src/routes/emergencyContact.route..js";
+import sosRoutes from "./src/routes/sosRoutes.js";
 
 const app = express();
 
