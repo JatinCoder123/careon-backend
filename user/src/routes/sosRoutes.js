@@ -1,6 +1,6 @@
 import express from "express";
 import { sendSOSMail } from "../services/emailService.js";
-import sendWhatsApp from "../services/whatsapp.service.js";
+import { sendWhatsApp } from "../services/whatsapp.service.js";
 
 const router = express.Router();
 
